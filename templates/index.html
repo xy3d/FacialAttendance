@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance</title>
+    <style>
+        body {
+            font-family: Courier, monospace;
+            margin: 0;
+            padding: 0;
+            background-color: #97DFF8;
+        }
+
+        h1 {
+            background-color: #97DFF8;
+            color: black;
+            text-align: center;
+            font-size: 50px;
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        #video-container {
+            display: flex;
+            justify-content: center;
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+
+        #video-stream {
+            max-width: 100%;
+            height: auto;
+            border: 3px solid #f2f2f2;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+
+        #footer {
+            background-color: black;
+            color: white;
+            text-align: center;
+            font-weight: bold;
+            font-size: 50px;
+            height: 200px;
+            line-height: 3;
+        }
+
+        #footer.green {
+            background-color: #00FF2A;
+        }
+
+        #footer.red {
+            background-color: #FF2D00;
+        }
+    </style>
+</head>
+<body>
+    <h1>Attendance</h1>
+    <div id="video-container">
+        <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Video Stream">
+    </div>
+    <div id="footer">
+        Detected: <span id="status-text">Waiting...</span>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.1.2/socket.io.js"></script>
+    <script>
+        const socket = io.connect('http://' + document.domain + ':' + location.port);
+
+        socket.on('detection_status', function (data) {
+            const status = JSON.parse(data);
+            const footer = document.getElementById('footer');
+            const statusText = document.getElementById('status-text');
+
+            if (status.detected) {
+                // Detected a face
+                footer.classList.remove('red');
+                footer.classList.add('green');
+                statusText.textContent = status.name;
+            } else {
+                // Unknown face
+                footer.classList.remove('green');
+                footer.classList.add('red');
+                statusText.textContent = 'Unknown';
+            }
+
+            // Reset to default color after 3 seconds
+            setTimeout(() => {
+                footer.classList.remove('green', 'red');
+                statusText.textContent = 'Unknown';
+            }, 3000);
+        });
+    </script>
+</body>
+</html>
