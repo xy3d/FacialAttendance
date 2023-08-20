@@ -3,6 +3,7 @@
 <head>
     <title>Dashboard</title>
     <style>
+        /* General styling for tables */
         table {
             border-collapse: collapse;
             width: 100%;
@@ -22,65 +23,103 @@
             background-color: #4CAF50;
             color: white;
         }
+
+        /* Styling for container and sections */
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .section {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            flex: 1;
+        }
+
+        /* Positioning for sections */
+        #attendance-section,
+        #time-section {
+            order: 1; /* Displayed first */
+            flex-basis: 50%;
+        }
+
+        #time-section{
+            order: 2; /* Displayed second */
+            flex-basis: 100%;
+        }
     </style>
 </head>
 <body>
-    <h1>Attendance Data</h1>
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Time</th>
-        </tr>
-        {% for row in attendance_data %}
-        <tr>
-            <td>{{ row[0] }}</td>
-            <td>{{ row[1] }}</td>
-            <td>{{ row[2] }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <div class="container">
+        <div class="section" id="attendance-section">
+            <h1>Attendance Data</h1>
+            <table>
+                <!-- Display the latest 5 attendance entries -->
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Time</th>
+                </tr>
+                {% for row in attendance_data[-5:] %}
+                <tr>
+                    <td>{{ row[0] }}</td>
+                    <td>{{ row[1] }}</td>
+                    <td>{{ row[2] }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
 
-    <h1>Time Data</h1>
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>InTime</th>
-            <th>OutTime</th>
-            <th>TotalTime</th>
-        </tr>
-        {% for row in time_data %}
-        <tr>
-            <td>{{ row[0] }}</td>
-            <td>{{ row[1] }}</td>
-            <td>{{ row[2] }}</td>
-            <td>{{ row[3] }}</td>
-            <td>{{ row[4] }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+        <div class="section" id="time-section">
+            <h1>Time Data</h1>
+            <table>
+                <!-- Display the latest 5 time entries -->
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>InTime</th>
+                    <th>OutTime</th>
+                    <th>TotalTime</th>
+                </tr>
+                {% for row in time_data[-5:] %}
+                <tr>
+                    <td>{{ row[0] }}</td>
+                    <td>{{ row[1] }}</td>
+                    <td>{{ row[2] }}</td>
+                    <td>{{ row[3] }}</td>
+                    <td>{{ row[4] }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
 
-    <h1>Anomaly Data</h1>
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>InTime</th>
-            <th>OutTime</th>
-            <th>TotalTime</th>
-            <th>Date</th>
-        </tr>
-        {% for row in anomaly_data %}
-        <tr>
-            <td>{{ row[0] }}</td>
-            <td>{{ row[1] }}</td>
-            <td>{{ row[2] }}</td>
-            <td>{{ row[3] }}</td>
-            <td>{{ row[4] }}</td>
-            <td>{{ row[5] }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <div class="section" id="anomaly-section">
+        <h1>Anomaly Data</h1>
+        <table>
+            <!-- Display the latest 5 anomaly entries -->
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>InTime</th>
+                <th>OutTime</th>
+                <th>TotalTime</th>
+                <th>Date</th>
+            </tr>
+            {% for row in anomaly_data[-5:] %}
+            <tr>
+                <td>{{ row[0] }}</td>
+                <td>{{ row[1] }}</td>
+                <td>{{ row[2] }}</td>
+                <td>{{ row[3] }}</td>
+                <td>{{ row[4] }}</td>
+                <td>{{ row[5] }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
 </body>
 </html>

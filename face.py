@@ -1,10 +1,12 @@
-import cv2, os, json, mysql.connector
+import cv2, os, json, mysql.connector, time, logging
 import numpy as np
 from datetime import datetime, date, timedelta
 from flask import Flask, render_template, Response, jsonify
 from mysql.connector import Error
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
+import face_recognition
+import speech_recognition as sr
 
 UPLOAD_FOLDER = 'data'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
@@ -12,6 +14,10 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app)
+
+werkzeug_logger = logging.getLogger('werkzeug')
+werkzeug_logger.setLevel(logging.WARNING)
+
 app.secret_key = "secret key"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -266,123 +272,120 @@ def takeAttendance(name, connection):
 
     except Error as e:
         print(f"The error '{e}' occurred while inserting attendance record")
-
-# Dictionary to keep track of the last detection time for each person
-last_detection_times = {}
+        
 
 def gen():
     data = []
     dir_path = 'data'
+    
+    known_face_encodings = []
+    known_face_names = []
 
-    # Load images and folder names from the directory
     for person_folder in os.listdir(dir_path):
         person_folder_path = os.path.join(dir_path, person_folder)
         if os.path.isdir(person_folder_path):
-            for imagess in os.listdir(person_folder_path):
-                img_path = os.path.join(person_folder_path, imagess)
-                img = cv2.imread(img_path)
-                data.append(img)
+            for image_filename in os.listdir(person_folder_path):
+                image_path = os.path.join(person_folder_path, image_filename)
+                try:
+                    known_image = face_recognition.load_image_file(image_path)
+                    face_encoding = face_recognition.face_encodings(known_image)[0]
+                    known_face_encodings.append(face_encoding)
+                    known_face_names.append(person_folder)
+                except IndexError:
+                    print(f"No face found in {image_path}. Skipping...")
+
 
     cap = cv2.VideoCapture(0)
-
-    consecutive_frames_required = 5  # Number of consecutive frames required for a valid match
-    consecutive_frames_detected = 0  # Counter for consecutive frames with a detected face
-    match_found = False  # Flag to indicate if a match has been found
+    cap.set(cv2.CAP_PROP_FPS, 30)
 
     while True:
         success, img = cap.read()
-        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Establish a new database connection and create a cursor for each iteration
+        connection = create_connection()
+        cursor = connection.cursor()
+        
+        if img is not None:
+            # Continue with face detection and other processing
+            face_locations = face_recognition.face_locations(img)
+            face_encodings = face_recognition.face_encodings(img, face_locations)
+        
+        
+        for face_encoding, face_location in zip(face_encodings, face_locations):
+            # Compare the face encoding with known face encodings
+            matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
+            name = "Unknown"
 
-        # Detect faces in the grayscale image
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        faces = face_cascade.detectMultiScale(img_gray, 1.3, 5)
+            if True in matches:
+                first_match_index = matches.index(True)
+                name = known_face_names[first_match_index]
 
-        if len(faces) > 0:
-            consecutive_frames_detected += 1
-        else:
-            consecutive_frames_detected = 0
-
-        if consecutive_frames_detected == consecutive_frames_required:
-            # Face detected in multiple consecutive frames
-            for (x, y, w, h) in faces:
-                roi_gray = img_gray[y:y + h, x:x + w]
-
-                # Flag to check if a match is found
-                match_found = False
-                registered_person = None
-
-                for stored_img in data:
-                    stored_img_gray = cv2.cvtColor(stored_img, cv2.COLOR_BGR2GRAY)
-                    stored_img_gray = cv2.resize(stored_img_gray, (w, h))
-                    diff = cv2.absdiff(roi_gray, stored_img_gray)
-                    diff_mean = np.mean(diff)
-                    matching_percentage = (1 - diff_mean / 255) * 100
-
-                    if matching_percentage > 60:
-                        person_folder_lower = person_folder.lower()
-                        current_time = datetime.now()
-
-                        # Check if enough time has passed since the last detection
-                        if person_folder_lower in last_detection_times and \
-                           (current_time - last_detection_times[person_folder_lower]) < timedelta(seconds=3):
-                            continue
-
-                        # Update the last detection time for the current person
-                        last_detection_times[person_folder_lower] = current_time
-
-                        # Check if the person is already registered
-                        registered_person = person_folder
-                        
-                        # Print the name and matching percentage in the console
-                        print(f"Detected: {person_folder} ({matching_percentage:.2f}%)")
-                        
-                        takeAttendance(person_folder, connection)
-                        # cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 3)
-                        # cv2.putText(img, f"{person_folder} ({matching_percentage:.2f}%)", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-                        match_found = True
-
-                        # Send detection status through WebSocket
-                        detection_status = {
-                            "detected": True,
-                            "name": person_folder
-                        }
-                        socketio.emit("detection_status", json.dumps(detection_status))
-
-                        break
-
-                if not match_found:
-                    # If no match is found, display "Unknown"
-                    # cv2.rectangle(img, (x, y), (x + w, y + h), (0, 0, 255), 3)
-                    # cv2.putText(img, "Unknown", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-
-                    # Send detection status through WebSocket (for unknown)
-                    detection_status = {
-                        "detected": False,
-                        "name": ""
-                    }
-                    socketio.emit("detection_status", json.dumps(detection_status))
+            y1, x2, y2, x1 = face_location
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 3)
+            cv2.putText(img, name, (x1, y2 + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            
+            # Retrieve the password for the recognized name from the database
+            if name != "Unknown":
+                cursor.execute("SELECT pwd FROM emp WHERE name = %s", (name,))
+                password_from_db = cursor.fetchone()[0]
+                
+                # Verify the password using voice recognition
+                password_verified = verify_voice_password(password_from_db)
+                
+                if password_verified:
+                    print("Password verified successfully.")
+                    # Proceed with attendance and other actions
+                else:
+                    print("Password verification failed.")
                     
-                # # Check if the detected person is already registered and send the appropriate status
-                # if registered_person is not None:
-                #     # Display "Already Registered" status
-                #     cv2.putText(img, "Already Registered", (x, y + h + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-                #     # Send detection status through WebSocket (for already registered)
-                #     detection_status = {
-                #         "detected": True,
-                #         "name": (registered_person,"Registered")
-                #     }
-                #     socketio.emit("detection_status", json.dumps(detection_status))
+            print(f"Detected: {name}")
+            takeAttendance(name, connection)
+            # cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 3)
+            # cv2.putText(img, f"{person_folder} ({matching_percentage:.2f}%)", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+            match_found = True
 
-        elif consecutive_frames_detected < consecutive_frames_required:
-            # Reset the match_found flag and consecutive_frames_detected counter
-            match_found = False
-
+            # Send detection status through WebSocket
+            detection_status = {
+                "detected": name != "Unknown",
+                "name": name
+            }
+            socketio.emit("detection_status", json.dumps(detection_status))
+            
+            # Delay for 3 seconds
+            time.sleep(3)    
+            
         ret, buffer = cv2.imencode('.jpg', img)
         frame = buffer.tobytes()
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
 
-    cap.release()
+        cap.release()
+        
+        
+def verify_voice_password(password_from_db):
+    recognizer = sr.Recognizer()
+
+    with sr.Microphone() as source:
+        print("Say your password:")
+        audio = recognizer.listen(source)
+
+    try:
+        recognized_text = recognizer.recognize_google(audio)
+        print("You said:", recognized_text)
+        
+        # Compare the recognized text with the password from the database
+        if recognized_text == password_from_db:
+            return True
+        else:
+            return False
+    except sr.UnknownValueError:
+        print("Could not understand audio")
+        return False
+    except sr.RequestError as e:
+        print("Could not request results; {0}".format(e))
+        return False
+
 
 @app.route('/video_feed')
 def video_feed():
