@@ -85,7 +85,7 @@ def create_connection():
             user='jayed',
             password='1234'
         )
-        print("Connected to MySQL database")
+        # print("Connected to MySQL database")
     except Error as e:
         print(f"The error '{e}' occurred while connecting to the MySQL database")
     return connection
@@ -295,18 +295,21 @@ def gen():
                     print(f"No face found in {image_path}. Skipping...")
 
 
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     cap.set(cv2.CAP_PROP_FPS, 30)
 
     while True:
         success, img = cap.read()
+        # print("Capture Success:", success)
+        # print("Image Shape:", img.shape if img is not None else None)
+        
         # img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
         # Establish a new database connection and create a cursor for each iteration
         connection = create_connection()
         cursor = connection.cursor()
         
-        if img is not None:
+        if img is not None and success:
             # Continue with face detection and other processing
             face_locations = face_recognition.face_locations(img)
             face_encodings = face_recognition.face_encodings(img, face_locations)
@@ -335,12 +338,13 @@ def gen():
                 
                 if password_verified:
                     print("Password verified successfully.")
+                    print(f"Detected: {name}")
+                    takeAttendance(name, connection)
                     # Proceed with attendance and other actions
                 else:
                     print("Password verification failed.")
                     
-            print(f"Detected: {name}")
-            takeAttendance(name, connection)
+
             # cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 3)
             # cv2.putText(img, f"{person_folder} ({matching_percentage:.2f}%)", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
             match_found = True
@@ -348,17 +352,25 @@ def gen():
             # Send detection status through WebSocket
             detection_status = {
                 "detected": name != "Unknown",
-                "name": name
+                "name": name,
+                "pass": password_verified
             }
             socketio.emit("detection_status", json.dumps(detection_status))
             
-            # Delay for 3 seconds
-            time.sleep(3)    
+            # # Delay for 3 seconds
+            # time.sleep(3)    
+            
             
         ret, buffer = cv2.imencode('.jpg', img)
-        frame = buffer.tobytes()
-        yield (b'--frame\r\n'
-                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+
+        if ret:
+            frame = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+        else:
+            print("Failed to encode frame using cv2.imencode")
+    else:
+        print("Failed to capture frame from the camera")
 
         cap.release()
         
