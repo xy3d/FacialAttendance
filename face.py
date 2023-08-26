@@ -1,7 +1,7 @@
 import cv2, os, json, mysql.connector, time, logging
 import numpy as np
 from datetime import datetime, date, timedelta
-from flask import Flask, render_template, Response, jsonify
+from flask import Flask, render_template, Response, jsonify, request
 from mysql.connector import Error
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
@@ -10,6 +10,7 @@ import speech_recognition as sr
 
 UPLOAD_FOLDER = 'data'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+# cap = cv2.VideoCapture(0)
 
 app = Flask(__name__)
 CORS(app)
@@ -273,6 +274,57 @@ def takeAttendance(name, connection):
     except Error as e:
         print(f"The error '{e}' occurred while inserting attendance record")
         
+# Function to capture images
+def capture_images(name, output_folder):
+    # Create a directory for the person if it doesn't exist
+    person_folder = os.path.join(output_folder, name)
+    os.makedirs(person_folder, exist_ok=True)
+
+    # Initialize the webcam
+    cap = cv2.VideoCapture(0)
+
+    # Capture 20 images
+    count = 0
+    while count < 10:
+        ret, frame = cap.read()
+
+        # Display the frame
+        cv2.imshow('Capture Images', frame)
+
+        # Introduce a delay of 0.5 seconds
+        time.sleep(0.5)
+
+        # Save the frame as an image
+        image_path = os.path.join(person_folder, f'{name}_{count}.jpg')
+        cv2.imwrite(image_path, frame)
+
+        count += 1
+
+        # Break the loop when 20 images are captured
+        if count == 20:
+            break
+
+        # Break the loop and move to the next person when 'q' is pressed
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    # Release the webcam and destroy the window
+    cap.release()
+    cv2.destroyAllWindows()
+    
+# Route for registering a new person
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        name = request.form['name']
+        if name:
+            capture_images(name, 'data')
+            return "Images captured and registered successfully!"
+        else:
+            return "Please provide a valid name."
+    return render_template('register.html')
+
+        
 
 def gen():
     data = []
@@ -295,7 +347,7 @@ def gen():
                     print(f"No face found in {image_path}. Skipping...")
 
 
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FPS, 30)
 
     while True:
@@ -374,6 +426,8 @@ def gen():
 
         cap.release()
         
+
+
         
 def verify_voice_password(password_from_db):
     recognizer = sr.Recognizer()

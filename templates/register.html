@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Registration</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+</head>
+<body>
+    <h1>Register New Person</h1>
+    <form id="registration-form" method="post">
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" required>
+        <button type="submit">Register</button>
+    </form>
+    <div>
+        <h2>Live Video Feed</h2>
+        <video id="video" autoplay></video>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('video');
+
+        // Get user media
+        async function startVideo() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            videoElement.srcObject = stream;
+        }
+
+        // On form submission, start video and capture images
+        $('#registration-form').on('submit', async function(event) {
+            event.preventDefault();
+            await startVideo();
+            setTimeout(captureImages, 1000);  // Delay for 1 second before capturing images
+        });
+
+        // Function to capture images
+        async function captureImages() {
+            const name = $('#name').val();
+
+            if (!name) {
+                alert('Please provide a name.');
+                return;
+            }
+
+            const stream = videoElement.srcObject;
+            const track = stream.getTracks()[0];
+
+            // Stop video stream
+            track.stop();
+            videoElement.srcObject = null;
+
+            // Send AJAX request to capture images
+            $.post('/register', { name: name }, function(response) {
+                alert(response);
+            });
+        }
+    </script>
+</body>
+</html>
